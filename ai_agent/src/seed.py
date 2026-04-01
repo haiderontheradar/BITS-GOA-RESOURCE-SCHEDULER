@@ -39,20 +39,20 @@ def seed_database():
 
         print("Seeding base entities...")
         # 1. Roles
-        roles = ['Student', 'Faculty', 'Club Secretary', 'IRS Admin']
+        roles = ['student', 'club member', 'club coordinator', 'faculty', 'admin']
         for r in roles:
             db.execute(text("INSERT INTO roles (role_name) VALUES (:r)"), {'r': r})
 
         # 2. Departments
-        depts = ['CS', 'EEE', 'Mechanical', 'Chemical']
+        depts = ['CS', 'EEE', 'Mechanical', 'Chemical', 'mathematics', 'physics', 'chemistry', 'biology']
         for d in depts:
             db.execute(text("INSERT INTO departments (dept_name) VALUES (:d)"), {'d': d})
 
         # 3. Clubs
         clubs = [
-            ('Coding Club', 'Technical'), 
+            ('DEVSOC', 'Technical'), 
             ('Dance Club', 'Cultural'), 
-            ('Photography Club', 'Creative'),
+            ('DOPY', 'Creative'),
             ('Drama Club', 'Cultural'),
             ('Sports Council', 'Sports')
         ]
