@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # Database Layer
+  db:
+    image: postgres:15-alpine
+    container_name: irs-postgres
+    restart: always
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-irsadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-irspassword}
+      POSTGRES_DB: ${POSTGRES_DB:-irsdb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Automatically run schema.sql to initialize the database
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - irs-network
+
+  # AI Layer
+  ai-agent:
+    build:
+      context: ./ai_agent
+      dockerfile: Dockerfile
+    container_name: irs-ai-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-irsadmin}:${POSTGRES_PASSWORD:-irspassword}@db:5432/${POSTGRES_DB:-irsdb}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    networks:
+      - irs-network
+
+  # Backend Layer (Placeholder)
+  backend:
+    image: node:18-alpine
+    container_name: irs-backend
+    working_dir: /app
+    command: >
+      sh -c "echo 'Backend Placeholder Running' && sleep infinity"
+    env_file:
+      - .env
+    depends_on:
+      - db
+    networks:
+      - irs-network
+
+  # Frontend Layer (Placeholder)
+  frontend:
+    image: nginx:alpine
+    container_name: irs-frontend
+    command: >
+      sh -c "echo 'Frontend Placeholder Running on port 80' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"
+    networks:
+      - irs-network
+
+  # Reverse Proxy
+  proxy:
+    image: nginx:alpine
+    container_name: irs-proxy
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - irs-network
+
+volumes:
+  postgres_data:
+
+networks:
+  irs-network:
+    driver: bridge
