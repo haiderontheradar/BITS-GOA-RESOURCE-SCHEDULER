@@ -110,3 +110,55 @@ CREATE TABLE notifications (
     is_read BOOLEAN DEFAULT FALSE,
     sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- =========================================================================
+-- TASK 1: CONCURRENCY CONTROL (PREVENT DOUBLE BOOKINGS)
+-- =========================================================================
+
+-- Step A: Create the logic function that checks for overlapping time slots
+CREATE OR REPLACE FUNCTION check_booking_overlap()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 
+        FROM bookings
+        WHERE resource_id = NEW.resource_id
+        AND approval_status IN ('approved_by_secretary', 'approved_by_faculty')
+        AND (NEW.start_time, NEW.end_time) OVERLAPS (start_time, end_time)
+    ) THEN
+        RAISE EXCEPTION 'Resource is already booked for this time slot.';
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step B: Attach the trigger to run automatically before any insert
+CREATE TRIGGER prevent_double_booking
+BEFORE INSERT ON bookings
+FOR EACH ROW
+EXECUTE FUNCTION check_booking_overlap();
+
+-- =========================================================================
+-- TASK 2: PROJECT EVALUATION REQUIREMENTS (DATABASE ROLES)
+-- =========================================================================
+
+-- Step C: Create a DBA role with ALL rights
+CREATE ROLE dba_admin WITH LOGIN PASSWORD 'AdminPass123!' SUPERUSER CREATEDB CREATEROLE;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO dba_admin;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO dba_admin;
+
+-- Step D: Create a View-Only user
+CREATE ROLE view_only_user WITH LOGIN PASSWORD 'ViewPass123!';
+GRANT CONNECT ON DATABASE irsdb TO view_only_user;
+GRANT USAGE ON SCHEMA public TO view_only_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO view_only_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO view_only_user;
+
+-- Step E: Create a View and Update user (No Create User/Table rights)
+CREATE ROLE view_update_user WITH LOGIN PASSWORD 'UpdatePass123!' NOSUPERUSER NOCREATEROLE NOCREATEDB;
+GRANT CONNECT ON DATABASE irsdb TO view_update_user;
+GRANT USAGE ON SCHEMA public TO view_update_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO view_update_user;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO view_update_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO view_update_user;
