@@ -1,5 +1,25 @@
 import { useState, useEffect } from 'react';
-import { DUMMY_RESOURCES } from '../data';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 // Adjusted status colors to look good in both light and dark modes
 const statusColors = {
@@ -11,10 +31,69 @@ const statusColors = {
 };
 
 export default function Dashboard({ user, onLogout }) {
-  const [resources, setResources] = useState(DUMMY_RESOURCES);
+  const [resources, setResources] = useState([]);
   const [selectedResource, setSelectedResource] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
+  
+  // Analytics State
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('');
+
+  // Fetch Live Resources
+  useEffect(() => {
+    fetch('/api/resources', {
+      headers: { 'Authorization': `Bearer ${user.token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (Array.isArray(data)) {
+        setResources(data);
+      } else {
+        console.error("Fetch Error:", data);
+        setResources([]);
+      }
+    })
+    .catch(console.error);
+  }, [user.token]);
+
+  // Handle AI Forecasting
+  const handlePredict = async (category_name) => {
+    if (!category_name) return;
+    setIsLoadingAnalytics(true);
+    setAnalyticsData(null);
+    try {
+      const res = await fetch(`/api/analytics/forecast?category_name=${encodeURIComponent(category_name)}`, {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      const data = await res.json();
+      
+      if (data && data.forecast) {
+        setAnalyticsData({
+          message: data.message,
+          warnings: data.crunch_warnings,
+          chart: {
+            labels: data.forecast.map(f => f.time),
+            datasets: [{
+              label: `Predicted Demand (${category_name})`,
+              data: data.forecast.map(f => f.predicted_demand),
+              borderColor: 'rgb(59, 130, 246)',
+              backgroundColor: 'rgba(59, 130, 246, 0.5)',
+              tension: 0.3,
+              pointBackgroundColor: data.forecast.map(f => f.fest_day ? 'red' : 'rgb(59, 130, 246)'),
+              pointRadius: data.forecast.map(f => f.fest_day ? 6 : 3)
+            }]
+          }
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      setToast("Failed to fetch AI predictions");
+      setTimeout(() => setToast(null), 3000);
+    }
+    setIsLoadingAnalytics(false);
+  };
   
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -107,6 +186,56 @@ export default function Dashboard({ user, onLogout }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
           </svg>
         </div>
+      </div>
+
+      {/* AI Analytics Panel */}
+      <div className="p-6 mb-8 bg-white border border-gray-200 rounded-xl shadow-sm dark:bg-gray-900 dark:border-gray-800">
+        <h2 className="flex items-center gap-2 mb-4 text-xl font-bold text-gray-900 dark:text-white">
+          <svg className="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          Smart Clerk Predictive Analytics
+        </h2>
+        <div className="flex flex-col gap-4 mb-4 sm:flex-row">
+          <select 
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="px-4 py-2.5 text-sm transition-colors border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+          >
+            <option value="">Select a Category...</option>
+            <option value="Electronics">Electronics</option>
+            <option value="Auditoriums">Auditoriums</option>
+            <option value="Rooms">Rooms</option>
+            <option value="Sports Equipment">Sports Equipment</option>
+          </select>
+          <button 
+            onClick={() => handlePredict(selectedCategory)}
+            disabled={!selectedCategory || isLoadingAnalytics}
+            className="px-6 py-2.5 text-sm font-semibold text-white transition-all bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-800 disabled:text-gray-500 hover:shadow-lg hover:shadow-indigo-600/20 active:scale-[0.98] focus:outline-none"
+          >
+            {isLoadingAnalytics ? 'Forecasting...' : 'Run SARIMAX Forecast'}
+          </button>
+        </div>
+        
+        {analyticsData && (
+          <div className="mt-6 animate-fade-in-up">
+            <div className={`p-4 mb-6 text-sm font-medium rounded-lg border ${analyticsData.warnings?.length > 0 ? 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-900/50 dark:text-red-400' : 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-900/50 dark:text-green-400'}`}>
+              <strong className="tracking-wide uppercase">AI Insight:</strong> {analyticsData.message}
+            </div>
+            <div className="h-64 p-4 border border-gray-100 rounded-lg dark:border-gray-800">
+              <Line 
+                data={analyticsData.chart} 
+                options={{ 
+                  responsive: true, 
+                  maintainAspectRatio: false,
+                  plugins: { legend: { labels: { color: isDarkMode ? '#e5e7eb' : '#374151' } } },
+                  scales: { 
+                    x: { ticks: { color: isDarkMode ? '#9ca3af' : '#6b7280' }, grid: { color: isDarkMode ? '#374151' : '#e5e7eb' } },
+                    y: { ticks: { color: isDarkMode ? '#9ca3af' : '#6b7280' }, grid: { color: isDarkMode ? '#374151' : '#e5e7eb' } }
+                  }
+                }} 
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Grid */}

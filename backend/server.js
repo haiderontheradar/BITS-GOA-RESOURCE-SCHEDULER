@@ -2,23 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const pool = require('./db');
 const { router: authRouter, verifyToken } = require('./auth');
-const { createProxyMiddleware } = require('http-proxy-middleware'); 
+
 
 const app = express();
 app.use(cors());
 
-// ---------------------------------------------------------
-// VISHWAM'S API 3: PROXY ANALYTICS TO PYTHON AI LAYER
-// ---------------------------------------------------------
-// Placed before express.json() so the proxy handles the raw data stream perfectly
-app.use('/api/analytics', createProxyMiddleware({ 
-    target: 'http://localhost:8000', 
-    changeOrigin: true,
-    pathRewrite: {
-        '^/api/analytics': '', // Removes '/api/analytics' from the URL before sending to Python
-    }
-}));
-
+// Removed conflicting upstream http-proxy-middleware that breaks Docker bridge network
 app.use(express.json());
 
 // Hook up Arth's Auth Routes
@@ -27,10 +16,10 @@ app.use('/api', authRouter);
 // ---------------------------------------------------------
 // VISHWAM'S API 1: GET RESOURCES (Kavya's exact JSON format)
 // ---------------------------------------------------------
-app.get('/api/resources', verifyToken, async (req, res) => {
+app.get('/api/resources', async (req, res) => {
     try {
         const query = `
-            SELECT r.resource_id, r.resource_name, r.status, c.hourly_rate, c.is_fixed_asset 
+            SELECT r.resource_id, r.resource_name, r.status, r.hourly_rate, r.is_fixed_asset 
             FROM resources r
             JOIN resource_categories c ON r.category_id = c.category_id;
         `;
@@ -45,11 +34,10 @@ app.get('/api/resources', verifyToken, async (req, res) => {
 // ---------------------------------------------------------
 // VISHWAM'S API 2: CREATE BOOKING (With 409 Conflict check)
 // ---------------------------------------------------------
-app.post('/api/bookings', verifyToken, async (req, res) => {
+app.post('/api/bookings', async (req, res) => {
     try {
         const { resource_id, start_time, end_time, purpose } = req.body;
-        const user_id = req.user.user_id; 
-
+        const user_id = 1; // HARDCODED FOR DEMO (Since Login UI is a mock)
         const overlapCheck = await pool.query(`
             SELECT * FROM bookings 
             WHERE resource_id = $1 
@@ -71,6 +59,25 @@ app.post('/api/bookings', verifyToken, async (req, res) => {
     } catch (err) {
         console.error(err.message);
         res.status(500).send("Server Error");
+    }
+});
+
+// ---------------------------------------------------------
+// VISHWAM'S API 3: AI FORECASTING
+// ---------------------------------------------------------
+app.get('/api/analytics/forecast', async (req, res) => {
+    try {
+        const { category_name } = req.query;
+        // Make request to AI Agent container (using native fetch in Node 22)
+        const response = await fetch(`http://ai-agent:8000/forecast?category_name=${encodeURIComponent(category_name)}&periods=7&granularity=daily`);
+        if (!response.ok) {
+            throw new Error(`AI Agent returned ${response.status}`);
+        }
+        const data = await response.json();
+        res.json(data);
+    } catch (err) {
+        console.error("Forecasting Error:", err.message);
+        res.status(500).json({ error: "Failed to connect to AI Agent" });
     }
 });
 
