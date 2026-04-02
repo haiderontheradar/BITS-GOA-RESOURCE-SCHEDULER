@@ -5,7 +5,7 @@ from faker import Faker
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, text
 
-from src.db.database import SQLALCHEMY_DATABASE_URL
+from src.db.database import DATABASE_URL
 
 fake = Faker()
 
@@ -29,7 +29,7 @@ def is_fest_date(date: datetime) -> int:
     return 1 if multiplier > 1.0 else 0
 
 def seed_database():
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    engine = create_engine(DATABASE_URL)
     
     with Session(engine) as db:
         print("Starting seed process... (Cleaning existing data)")
@@ -99,7 +99,7 @@ def seed_database():
                 INSERT INTO users (bits_id, full_name, email, password_hash, role_id, club_id, department_id)
                 VALUES (:bid, :fn, :em, 'hashed_pw', 1, :cid, 1)
             '''), {
-                'bid': f"202{random.randint(1,4)}A7PS{random.randint(100,999)}G",
+                'bid': f"202{random.randint(1,4)}A7PS{100+i}G",
                 'fn': fake.name(),
                 'em': fake.email(),
                 'cid': random.randint(1, 5)
@@ -152,17 +152,22 @@ def seed_database():
                     if random.random() < 0.3: # 30% chance returned late
                         actual_return_time += timedelta(minutes=random.randint(5, 45))
                     
-                    db.execute(text('''
-                        INSERT INTO bookings (user_id, resource_id, request_time, start_time, end_time, actual_return_time, approval_status)
-                        VALUES (:u_id, :r_id, :req, :st, :et, :act, 'approved_by_faculty')
-                    '''), {
-                        'u_id': u_id,
-                        'r_id': r_id,
-                        'req': start_time - timedelta(days=1),
-                        'st': start_time,
-                        'et': end_time,
-                        'act': actual_return_time
-                    })
+                    try:
+                        db.execute(text('''
+                            INSERT INTO bookings (user_id, resource_id, request_time, start_time, end_time, actual_return_time, approval_status)
+                            VALUES (:u_id, :r_id, :req, :st, :et, :act, 'approved_by_faculty')
+                        '''), {
+                            'u_id': u_id,
+                            'r_id': r_id,
+                            'req': start_time - timedelta(days=1),
+                            'st': start_time,
+                            'et': end_time,
+                            'act': actual_return_time
+                        })
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+                        continue
             
             current_date += timedelta(days=1)
         
