@@ -1,6 +1,8 @@
 # BITS Goa: Inventory & Resource Scheduler (IRS) 🎓
 
-A centralized, highly scalable, and fully-normalized database management system designed specifically for the BITS Pilani Goa Campus ecosystem. IRS allows campus clubs, departments, and faculty to seamlessly book resources (rooms, equipment, AV gear), manage organizational budgets, and eliminate scheduling conflicts through strict database-level concurrency controls and an AI-driven predictive agent.
+The **BITS Goa: Inventory & Resource Scheduler (IRS)** is a centralized, highly scalable database management system designed specifically for the BITS Pilani Goa Campus ecosystem. The foundation of IRS is built on a strict **Third Normal Form (3NF) relational architecture**. This 10-table schema meticulously eliminates data redundancy, prevents update anomalies, and ensures absolute data integrity by removing transitive dependencies—strictly separating independent organizational entities (Clubs, Roles, Departments) from complex transactional data (Bookings, Budgets, Maintenance). 
+
+To elevate the system beyond standard CRUD operations, IRS integrates a **Python-based AI Predictive Agent**. Acting as a "Smart Clerk," this machine-learning layer actively queries the PostgreSQL database to analyze historical booking logs. It is designed to forecast resource crunches, predict peak equipment demand during major campus fests (like Waves or Quark), and suggest optimal buffer times between reservations to ensure maximum resource availability. Together with strict database-level concurrency controls, IRS provides a flawless, conflict-free booking experience for campus clubs and faculty.
 
 ---
 
