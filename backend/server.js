@@ -2,9 +2,23 @@ const express = require('express');
 const cors = require('cors');
 const pool = require('./db');
 const { router: authRouter, verifyToken } = require('./auth');
+const { createProxyMiddleware } = require('http-proxy-middleware'); 
 
 const app = express();
 app.use(cors());
+
+// ---------------------------------------------------------
+// VISHWAM'S API 3: PROXY ANALYTICS TO PYTHON AI LAYER
+// ---------------------------------------------------------
+// Placed before express.json() so the proxy handles the raw data stream perfectly
+app.use('/api/analytics', createProxyMiddleware({ 
+    target: 'http://localhost:8000', 
+    changeOrigin: true,
+    pathRewrite: {
+        '^/api/analytics': '', // Removes '/api/analytics' from the URL before sending to Python
+    }
+}));
+
 app.use(express.json());
 
 // Hook up Arth's Auth Routes
@@ -15,7 +29,6 @@ app.use('/api', authRouter);
 // ---------------------------------------------------------
 app.get('/api/resources', verifyToken, async (req, res) => {
     try {
-        // Joining tables to get exactly what Kavya asked for
         const query = `
             SELECT r.resource_id, r.resource_name, r.status, c.hourly_rate, c.is_fixed_asset 
             FROM resources r
@@ -34,11 +47,9 @@ app.get('/api/resources', verifyToken, async (req, res) => {
 // ---------------------------------------------------------
 app.post('/api/bookings', verifyToken, async (req, res) => {
     try {
-        // Kavya sends these from her modal
         const { resource_id, start_time, end_time, purpose } = req.body;
-        const user_id = req.user.user_id; // Arth's middleware gives us this securely!
+        const user_id = req.user.user_id; 
 
-        // CHECK 1: Double-booking prevention (Returns 409)
         const overlapCheck = await pool.query(`
             SELECT * FROM bookings 
             WHERE resource_id = $1 
@@ -50,7 +61,6 @@ app.post('/api/bookings', verifyToken, async (req, res) => {
             return res.status(409).json({ error: "Conflict: Resource is already booked." });
         }
 
-        // CHECK 2: Insert the booking safely
         const newBooking = await pool.query(`
             INSERT INTO bookings (user_id, resource_id, request_time, start_time, end_time, purpose, status)
             VALUES ($1, $2, NOW(), $3, $4, $5, 'pending')
